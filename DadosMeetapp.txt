@@ -1,9 +1,0 @@
-docker run --name postgresmeetapp -e POSTGRES_PASSWORD=docker -p 5432:5432 -d postgres
-docker run --name redismeetapp -p 6379:6379 -d -t redis:alpine
-docker run --name mongomeetapp -p 27017:27017 -d -t mongo
-
-Containers Docker
-
-redismeetapp (12f91ef38b69e205128c52800eeecded6fb82875857c63824d4b78e43d6ab0a8)
-mongomeetapp (1697ef68a88deafddd701ac757eaf7a126615bb29caa465517d845f98ec3f328)
-postgresmeetapp (9134525756c0183375fea842f945c2e6a0a34a38b8124cfa18835f1c144250c4)
