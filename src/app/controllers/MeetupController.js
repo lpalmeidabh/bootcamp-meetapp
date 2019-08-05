@@ -9,17 +9,13 @@ class MeetupController {
   async index(req, res) {
     const page = req.query.page || 1;
     const amount = 10;
-    const where = {};
+    const searchDate = req.query.date ? parseISO(req.query.date) : new Date();
 
-    if (req.query.date) {
-      const searchDate = parseISO(req.query.date);
-
-      where.date = {
-        [Op.between]: [startOfDay(searchDate), endOfDay(searchDate)],
-      };
-    }
+    const where = {
+      user_id: { [Op.ne]: req.userId },
+      date: { [Op.between]: [startOfDay(searchDate), endOfDay(searchDate)] },
+    };
     const meetups = await Meetup.findAll({
-      // where: { user_id: !req.userId, date: { gt: new Date() } },
       where,
       order: ['date'],
       limit: amount,
@@ -28,6 +24,7 @@ class MeetupController {
       include: [
         {
           model: File,
+          as: 'banner',
           attributes: ['id', 'path', 'url'],
         },
         User,
@@ -35,6 +32,20 @@ class MeetupController {
     });
 
     return res.json(meetups);
+  }
+
+  async details(req, res) {
+    const meetup = await Meetup.findByPk(req.params.id, {
+      include: [
+        {
+          model: File,
+          as: 'banner',
+          attributes: ['id', 'path', 'url'],
+        },
+        User,
+      ],
+    });
+    return res.json(meetup);
   }
 
   async store(req, res) {
@@ -68,8 +79,8 @@ class MeetupController {
     const schema = Yup.object().shape({
       banner_id: Yup.number().required(),
       title: Yup.string().required(),
-      description: Yup.string().required,
-      location: Yup.string().required,
+      description: Yup.string().required(),
+      location: Yup.string().required(),
       date: Yup.date().required(),
     });
 

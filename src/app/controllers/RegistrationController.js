@@ -1,6 +1,8 @@
 import { Op } from 'sequelize';
 import Meetup from '../models/Meetup';
+import File from '../models/File';
 import User from '../models/User';
+
 import Registration from '../models/Registration';
 import Queue from '../../lib/Queue';
 import RegistrationMail from '../jobs/RegistrationMail';
@@ -8,20 +10,30 @@ import RegistrationMail from '../jobs/RegistrationMail';
 class RegistrationController {
   async index(req, res) {
     const registrations = await Registration.findAll({
-      where: { user_id: req.userId },
-      order: ['date', 'DESC'],
-      attributes: ['id', 'title', 'description', 'location', 'date', 'past'],
+      where: {
+        user_id: req.userId,
+      },
       include: [
         {
           model: Meetup,
-          as: 'meetup',
           where: {
             date: {
               [Op.gt]: new Date(),
             },
           },
+          include: [
+            {
+              model: File,
+              as: 'banner',
+              attributes: ['id', 'path', 'url'],
+            },
+            User,
+          ],
+
+          required: true,
         },
       ],
+      order: [[Meetup, 'date']],
     });
 
     return res.json(registrations);
@@ -29,25 +41,40 @@ class RegistrationController {
 
   async store(req, res) {
     const meetup = await Meetup.findByPk(req.params.id, {
-      include: [{ model: User, as: 'user' }],
+      include: [User],
     });
     const user = await User.findByPk(req.userId);
 
     if (!meetup) {
-      return res.status(400).json({ error: "Meetup doesn't exist" });
+      return res.status(400).json({ error: 'A meetup não existe' });
     }
 
     if (meetup.user_id === req.userId) {
       return res
         .status(400)
-        .json({ error: "You can't register to meetups you're owner" });
+        .json({ error: 'Você não pode registrar em suas próprias meetups' });
     }
 
     if (meetup.past) {
-      return res
-        .status(400)
-        .json({ error: "You can't register to past meetups" });
+      return res.status(400).json({
+        error: 'Você não pode registrar em meetups que já aconteceram.',
+      });
     }
+
+    const checkDate = await Registration.findOne({
+      where: {
+        user_id: user.id,
+      },
+      include: [
+        {
+          model: Meetup,
+          required: true,
+          where: {
+            date: meetup.date,
+          },
+        },
+      ],
+    });
 
     const isUserAlreadyRegistered = await Registration.findOne({
       where: {
@@ -59,25 +86,12 @@ class RegistrationController {
     if (isUserAlreadyRegistered) {
       return res
         .status(400)
-        .json({ error: 'You are already registered to this meetup' });
+        .json({ error: 'Você já está registrado nesta meetup' });
     }
 
-    const sameDateTimeRegistration = await Registration.findOne({
-      where: {
-        user_id: req.userId,
-      },
-      include: [
-        {
-          model: Meetup,
-          as: 'meetup',
-          where: { date: meetup.date },
-        },
-      ],
-    });
-
-    if (sameDateTimeRegistration) {
+    if (checkDate) {
       return res.status(400).json({
-        error: 'You are already registered on another meetup at this time',
+        error: 'Você ja está registrado em outra meetup neste mesmo horário',
       });
     }
 
@@ -91,29 +105,28 @@ class RegistrationController {
       user,
     });
 
+    console.log(registration);
     return res.json(registration);
   }
 
-  // async delete(req, res) {
-  //   const meetup = await Meetup.findByPk(req.params.id, {
-  //     include: [
-  //       {
-  //         model: User,
-  //         as: 'owner',
-  //         attributes: ['name', 'email'],
-  //       },
-  //     ],
-  //   });
+  async delete(req, res) {
+    const registration = await Registration.findOne({
+      where: {
+        user_id: req.userId,
+        meetup_id: req.params.id,
+      },
+    });
 
-  //   if (meetup.user_id !== req.userId) {
-  //     return res
-  //       .status(401)
-  //       .json({ error: "An user can't cancel other user's meetup" });
-  //   }
+    if (registration.user_id !== req.userId) {
+      return res.status(401).json({
+        error:
+          'Você não pode cancelar a inscrição de outro usuario em uma meetup',
+      });
+    }
 
-  //   await meetup.delete();
-  //   return res.json(re);
-  // }
+    await registration.destroy();
+    return res.send();
+  }
 }
 
 export default new RegistrationController();
